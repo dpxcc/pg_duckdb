@@ -259,9 +259,8 @@ DECLARE_PG_FUNCTION(duckdb_create_table_trigger) {
 	}
 
 	/*
-	 * For now, we don't support DuckDB queries in transactions. To support
-	 * write queries in transactions we'll need to link Postgres and DuckdB
-	 * their transaction lifecycles.
+	 * For now, we don't support DuckDB DDL queries in transactions,
+	 * because they write to both the Postgres and the DuckDB database.
 	 */
 	PreventInTransactionBlock(true, "DuckDB queries");
 
@@ -283,6 +282,9 @@ DECLARE_PG_FUNCTION(duckdb_create_table_trigger) {
 	std::string create_table_string(pgduckdb_get_tabledef(relid));
 
 	auto connection = pgduckdb::DuckDBManager::GetConnection();
+	/* We're going to run multiple queries in DuckDB, so we need to start a
+	 * transaction to ensure ACID guarantees hold. */
+	connection->BeginTransaction();
 	Query *ctas_query = nullptr;
 
 	if (IsA(parsetree, CreateTableAsStmt) && !ctas_skip_data) {
@@ -421,12 +423,15 @@ DECLARE_PG_FUNCTION(duckdb_drop_trigger) {
 		for (auto proc = 0; proc < SPI_processed; ++proc) {
 			if (!connection) {
 				/*
-				 * For now, we don't support DuckDB queries in transactions. To support
-				 * write queries in transactions we'll need to link Postgres and DuckdB
-				 * their transaction lifecycles.
+				 * For now, we don't support DuckDB DDL queries in
+				 * transactions, because they write to both the Postgres and
+				 * the DuckDB database.
 				 */
 				PreventInTransactionBlock(true, "DuckDB queries");
 				connection = pgduckdb::DuckDBManager::GetConnection();
+				/* We're going to run multiple queries in DuckDB, so we need to
+				 * start a transaction to ensure ACID guarantees hold. */
+				connection->BeginTransaction();
 			}
 			HeapTuple tuple = SPI_tuptable->vals[proc];
 
@@ -468,12 +473,14 @@ DECLARE_PG_FUNCTION(duckdb_drop_trigger) {
 		}
 		if (!connection) {
 			/*
-			 * For now, we don't support DuckDB queries in transactions. To support
-			 * write queries in transactions we'll need to link Postgres and DuckdB
-			 * their transaction lifecycles.
+			 * For now, we don't support DuckDB DDL queries in transactions,
+			 * because they write to both the Postgres and the DuckDB database.
 			 */
 			PreventInTransactionBlock(true, "DuckDB queries");
 			connection = pgduckdb::DuckDBManager::GetConnection();
+			/* We're going to run multiple queries in DuckDB, so we need to
+			 * start a transaction to ensure ACID guarantees hold. */
+			connection->BeginTransaction();
 		}
 		char *table_name = SPI_getvalue(tuple, SPI_tuptable->tupdesc, 2);
 		pgduckdb::DuckDBQueryOrThrow(*connection,

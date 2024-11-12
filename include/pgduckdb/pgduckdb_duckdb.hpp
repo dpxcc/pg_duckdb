@@ -4,13 +4,18 @@
 
 namespace pgduckdb {
 
-extern bool started_duckdb_transaction;
+bool DuckdbDidWrites();
+bool DuckdbDidWrites(duckdb::ClientContext &context);
 
 class DuckDBManager {
 public:
+	static inline bool
+	IsInitialized() {
+		return instance.database != nullptr;
+	}
+
 	static inline DuckDBManager &
 	Get() {
-		static DuckDBManager instance;
 		if (!instance.database) {
 			instance.Initialize();
 		}
@@ -26,14 +31,11 @@ public:
 		return default_dbname;
 	}
 
-	void
-	Reset() {
-		delete database;
-		database = nullptr;
-	}
+	void Reset();
 
 private:
 	DuckDBManager();
+	static DuckDBManager instance;
 
 	void Initialize();
 

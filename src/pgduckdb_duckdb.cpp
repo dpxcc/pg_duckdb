@@ -1,3 +1,4 @@
+#include "pgduckdb/pgduckdb_duckdb.hpp"
 #include "duckdb.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 #include "pgduckdb/pgduckdb_guc.h"
@@ -7,6 +8,7 @@
 #include "pgduckdb/catalog/pgduckdb_storage.hpp"
 #include "pgduckdb/scan/postgres_scan.hpp"
 #include "pgduckdb/scan/postgres_seq_scan.hpp"
+#include "pgduckdb/pg/transactions.hpp"
 
 extern "C" {
 #include "postgres.h"
@@ -73,6 +75,26 @@ CreateOrGetDirectoryPath(const char *directory_name) {
 
 	return duckdb_data_directory;
 }
+
+bool
+DuckdbDidWrites() {
+	if (!DuckDBManager::IsInitialized()) {
+		return false;
+	}
+	auto connection = DuckDBManager::GetConnectionUnsafe();
+	auto &context = *connection->context;
+	return DuckdbDidWrites(context);
+}
+
+bool
+DuckdbDidWrites(duckdb::ClientContext &context) {
+	if (!context.transaction.HasActiveTransaction()) {
+		return false;
+	}
+	return context.ActiveTransaction().ModifiedDatabase() != nullptr;
+}
+
+DuckDBManager DuckDBManager::instance;
 
 DuckDBManager::DuckDBManager() {
 }
@@ -156,6 +178,18 @@ DuckDBManager::Initialize() {
 
 	LoadFunctions(context);
 	LoadExtensions(context);
+
+	RegisterDuckdbXactCallback();
+}
+
+void
+DuckDBManager::Reset() {
+	if (database == nullptr) {
+		return;
+	}
+	UnregisterDuckdbXactCallback();
+	delete database;
+	database = nullptr;
 }
 
 void
@@ -301,9 +335,6 @@ DuckDBManager::CreateConnection() {
 	return connection;
 }
 
-static bool transaction_handler_configured = false;
-bool started_duckdb_transaction = false;
-
 /* Returns the cached connection to the global DuckDB instance. */
 duckdb::Connection *
 DuckDBManager::GetConnection() {
@@ -314,14 +345,13 @@ DuckDBManager::GetConnection() {
 	auto &instance = Get();
 	auto &context = *instance.connection->context;
 
-	if (!transaction_handler_configured) {
-		RegisterDuckdbXactCallback();
-	}
-
-	if (!started_duckdb_transaction) {
-		// context.transaction.SetAutoCommit(false);
-		instance.connection->BeginTransaction();
-		started_duckdb_transaction = true;
+	if (!context.transaction.HasActiveTransaction()) {
+		if (IsSubTransaction()) {
+			elog(ERROR, "SAVEPOINT is not supported in DuckDB");
+		}
+		if (IsInTransactionBlock()) {
+			instance.connection->BeginTransaction();
+		}
 	}
 	instance.RefreshConnectionState(context);
 

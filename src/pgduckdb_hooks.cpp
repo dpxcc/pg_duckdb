@@ -19,6 +19,7 @@ extern "C" {
 }
 
 #include "pgduckdb/pgduckdb.h"
+#include "pgduckdb/pgduckdb_xact.hpp"
 #include "pgduckdb/pgduckdb_guc.h"
 #include "pgduckdb/pgduckdb_metadata_cache.hpp"
 #include "pgduckdb/pgduckdb_ddl.hpp"
@@ -144,7 +145,10 @@ IsAllowedStatement(Query *query, bool throw_error = false) {
 		if (!IsDuckdbTable(resultRte->relid)) {
 			elog(elevel, "DuckDB does not support modififying Postgres tables");
 			return false;
+		} else if (IsInTransactionBlock(true) && pgduckdb::PostgresDidWrites()) {
+			elog(elevel, "Writing to DuckDB and Postgres tables in the same transaction block is not supported");
 		}
+		return false;
 	}
 
 	/*
@@ -174,21 +178,6 @@ IsAllowedStatement(Query *query, bool throw_error = false) {
 		return false;
 	}
 
-	/*
-	 * We don't support multi-statement transactions yet, so don't try to
-	 * execute queries in them even if duckdb.force_execution is enabled.
-	 */
-	if (IsInTransactionBlock(true)) {
-		if (throw_error) {
-			/*
-			 * We don't elog manually here, because PreventInTransactionBlock
-			 * provides very detailed errors.
-			 */
-			PreventInTransactionBlock(true, "DuckDB queries");
-		}
-		return false;
-	}
-
 	/* Anything else is hopefully fine... */
 	return true;
 }
@@ -206,6 +195,9 @@ DuckdbPlannerHook_Cpp(Query *parse, const char *query_string, int cursor_options
 				return duckdbPlan;
 			}
 			/* If we can't create a plan, we'll fall back to Postgres */
+		}
+		if (parse->commandType != CMD_SELECT && pgduckdb::DuckdbDidWrites() && IsInTransactionBlock(true)) {
+			elog(ERROR, "Writing to DuckDB and Postgres tables in the same transaction block is not supported");
 		}
 	}
 
