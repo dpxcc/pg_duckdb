@@ -65,19 +65,18 @@ PostgresHeapTable::PostgresHeapTable(duckdb::Catalog &catalog, duckdb::SchemaCat
 }
 
 duckdb::unique_ptr<duckdb::BaseStatistics>
-PostgresHeapTable::GetStatistics(duckdb::ClientContext &context, duckdb::column_t column_id) {
+PostgresHeapTable::GetStatistics(duckdb::ClientContext &, duckdb::column_t) {
 	throw duckdb::NotImplementedException("GetStatistics not supported yet");
 }
 
 duckdb::TableFunction
-PostgresHeapTable::GetScanFunction(duckdb::ClientContext &context,
-                                   duckdb::unique_ptr<duckdb::FunctionData> &bind_data) {
+PostgresHeapTable::GetScanFunction(duckdb::ClientContext &, duckdb::unique_ptr<duckdb::FunctionData> &bind_data) {
 	bind_data = duckdb::make_uniq<PostgresSeqScanFunctionData>(rel, cardinality, snapshot);
 	return PostgresSeqScanFunction();
 }
 
 duckdb::TableStorageInfo
-PostgresHeapTable::GetStorageInfo(duckdb::ClientContext &context) {
+PostgresHeapTable::GetStorageInfo(duckdb::ClientContext &) {
 	throw duckdb::NotImplementedException("GetStorageInfo not supported yet");
 }
 

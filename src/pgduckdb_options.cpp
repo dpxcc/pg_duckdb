@@ -200,6 +200,7 @@ DECLARE_PG_FUNCTION(cache) {
 }
 
 DECLARE_PG_FUNCTION(pgduckdb_recycle_ddb) {
+	(void)fcinfo;
 	pgduckdb::DuckDBManager::Get().Reset();
 	PG_RETURN_BOOL(true);
 }

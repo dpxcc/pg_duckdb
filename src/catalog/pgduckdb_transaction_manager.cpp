@@ -42,8 +42,7 @@ PostgresTransactionManager::RollbackTransaction(duckdb::Transaction &transaction
 }
 
 void
-PostgresTransactionManager::Checkpoint(duckdb::ClientContext &context, bool force) {
-	return;
+PostgresTransactionManager::Checkpoint(duckdb::ClientContext &, bool) {
 }
 
 } // namespace pgduckdb
